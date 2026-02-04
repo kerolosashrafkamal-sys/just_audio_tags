@@ -34,6 +34,8 @@ import androidx.media3.common.Metadata;
 import androidx.media3.exoplayer.metadata.MetadataOutput;
 import androidx.media3.extractor.metadata.icy.IcyHeaders;
 import androidx.media3.extractor.metadata.icy.IcyInfo;
+import androidx.media3.extractor.metadata.id3.Id3Frame;
+import androidx.media3.extractor.metadata.id3.TextInformationFrame;
 import androidx.media3.exoplayer.source.ClippingMediaSource; // Deprecated
 // For some reason, this import triggers the [deprecation] warning, despite the
 // warnings being suppressed at each use.
@@ -93,6 +95,9 @@ public class AudioPlayer implements MethodCallHandler, Player.Listener, Metadata
     private Map<String, MediaSource> mediaSources = new HashMap<String, MediaSource>();
     private IcyInfo icyInfo;
     private IcyHeaders icyHeaders;
+    private String id3Title;
+    private String id3Artist;
+    private Map<String, String> id3All = new HashMap<String, String>();
     private AudioAttributes pendingAudioAttributes;
     private LoadControl loadControl;
     private boolean offloadSchedulingEnabled;
@@ -248,6 +253,22 @@ public class AudioPlayer implements MethodCallHandler, Player.Listener, Metadata
             if (entry instanceof IcyInfo) {
                 icyInfo = (IcyInfo) entry;
                 broadcastImmediatePlaybackEvent();
+            } else if (entry instanceof Id3Frame) {
+                if (entry instanceof TextInformationFrame) {
+                    TextInformationFrame textFrame = (TextInformationFrame) entry;
+                    if ("TIT2".equals(textFrame.id)) {
+                        id3Title = textFrame.value;
+                        id3All.put(textFrame.id, textFrame.value);
+                        broadcastImmediatePlaybackEvent();
+                    } else if ("TPE1".equals(textFrame.id)) {
+                        id3Artist = textFrame.value;
+                        id3All.put(textFrame.id, textFrame.value);
+                        broadcastImmediatePlaybackEvent();
+                    } else if (textFrame.value != null) {
+                        id3All.put(textFrame.id, textFrame.value);
+                        broadcastImmediatePlaybackEvent();
+                    }
+                }
             }
         }
     }
@@ -767,6 +788,11 @@ public class AudioPlayer implements MethodCallHandler, Player.Listener, Metadata
         processingState = ProcessingState.loading;
         errorCode = null;
         errorMessage = null;
+        icyInfo = null;
+        icyHeaders = null;
+        id3Title = null;
+        id3Artist = null;
+        id3All.clear();
         enqueuePlaybackEvent();
         int windowIndex = initialIndex != null ? initialIndex : 0;
         player.setMediaSources(mediaSources, windowIndex, initialPosition);
@@ -902,9 +928,29 @@ public class AudioPlayer implements MethodCallHandler, Player.Listener, Metadata
     private Map<String, Object> collectIcyMetadata() {
         final Map<String, Object> icyData = new HashMap<>();
         if (icyInfo != null) {
-            final Map<String, String> info = new HashMap<>();
+            final Map<String, Object> info = new HashMap<>();
             info.put("title", icyInfo.title);
             info.put("url", icyInfo.url);
+            if (id3Artist != null) info.put("artist", id3Artist);
+            if (!id3All.isEmpty()) info.put("extras", new HashMap<>(id3All));
+            icyData.put("info", info);
+        } else if (id3Title != null || id3Artist != null || !id3All.isEmpty()) {
+            final Map<String, Object> info = new HashMap<>();
+            String combinedTitle;
+            if (id3Artist != null && id3Title != null) {
+                combinedTitle = id3Artist + " - " + id3Title;
+            } else if (id3Title != null) {
+                combinedTitle = id3Title;
+            } else {
+                combinedTitle = id3Artist;
+            }
+            if (combinedTitle != null) {
+                info.put("title", combinedTitle);
+            }
+            if (id3Artist != null) {
+                info.put("artist", id3Artist);
+            }
+            if (!id3All.isEmpty()) info.put("extras", new HashMap<>(id3All)); // expose all ID3 text frames
             icyData.put("info", info);
         }
         if (icyHeaders != null) {

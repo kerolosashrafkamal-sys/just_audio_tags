@@ -435,6 +435,9 @@
     BOOL hasIcyData = NO;
     NSString *title = (NSString *)[NSNull null];
     NSString *url = (NSString *)[NSNull null];
+    NSString *id3Title = (NSString *)[NSNull null];
+    NSString *id3Artist = (NSString *)[NSNull null];
+    NSMutableDictionary *id3All = [[NSMutableDictionary alloc] init];
     for (int i = 0; i < groups.count; i++) {
         AVTimedMetadataGroup *group = groups[i];
         for (int j = 0; j < group.items.count; j++) {
@@ -445,16 +448,36 @@
             } else if ([@"icy/StreamUrl" isEqualToString:item.identifier]) {
                 hasIcyData = YES;
                 url = (NSString *)item.value;
+            } else if ([item.keySpace isEqualToString:AVMetadataKeySpaceID3]) {
+                if (item.commonKey == AVMetadataCommonKeyTitle || [item.identifier containsString:@"TIT2"]) {
+                    id3Title = (NSString *)item.stringValue;
+                } else if (item.commonKey == AVMetadataCommonKeyArtist || [item.identifier containsString:@"TPE1"]) {
+                    id3Artist = (NSString *)item.stringValue;
+                }
+                if (item.identifier != nil && item.stringValue != nil) {
+                    [id3All setObject:item.stringValue forKey:item.identifier];
+                }
             }
         }
     }
-    if (hasIcyData) {
-        _icyMetadata = @{
-            @"info": @{
-                @"title": title,
-                @"url": url,
-            },
-        };
+    if (hasIcyData || id3Title != (id)[NSNull null] || id3Artist != (id)[NSNull null]) {
+        NSMutableDictionary *info = [[NSMutableDictionary alloc] init];
+        if (title != (id)[NSNull null]) [info setObject:title forKey:@"title"];
+        if (url != (id)[NSNull null]) [info setObject:url forKey:@"url"];
+        if (id3Artist != (id)[NSNull null] && id3Title != (id)[NSNull null]) {
+            NSString *combined = [NSString stringWithFormat:@"%@ - %@", id3Artist, id3Title];
+            [info setObject:combined forKey:@"title"];
+            [info setObject:id3Artist forKey:@"artist"];
+        } else if (id3Title != (id)[NSNull null]) {
+            [info setObject:id3Title forKey:@"title"];
+        } else if (id3Artist != (id)[NSNull null]) {
+            [info setObject:id3Artist forKey:@"title"];
+            [info setObject:id3Artist forKey:@"artist"];
+        }
+        if (id3All.count > 0) {
+            [info setObject:id3All forKey:@"extras"]; // expose all ID3 frames
+        }
+        _icyMetadata = @{ @"info": info };
         [self broadcastPlaybackEvent];
     }
 }

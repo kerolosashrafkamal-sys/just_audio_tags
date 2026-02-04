@@ -2050,26 +2050,32 @@ class PlayerState {
 class IcyInfo {
   final String? title;
   final String? url;
+  final Map<String, String>? extras;
+  final String? artist;
 
   static IcyInfo _fromMessage(IcyInfoMessage message) => IcyInfo(
         title: message.title,
         url: message.url,
+        extras: message.extras,
+        artist: message.artist,
       );
 
-  IcyInfo({required this.title, required this.url});
+  IcyInfo({required this.title, required this.url, this.extras, this.artist});
 
   @override
-  String toString() => 'title=$title,url=$url';
+  String toString() => 'title=$title,url=$url,artist=$artist,extras=$extras';
 
   @override
-  int get hashCode => Object.hash(title, url);
+  int get hashCode => Object.hash(title, url, artist, extras);
 
   @override
   bool operator ==(Object other) =>
       other.runtimeType == runtimeType &&
       other is IcyInfo &&
       other.title == title &&
-      other.url == url;
+      other.url == url &&
+      other.artist == artist &&
+      _mapEquals(other.extras, extras);
 }
 
 class IcyHeaders {
@@ -4613,4 +4619,13 @@ HttpClient _createHttpClient({String? userAgent}) {
     client.userAgent = userAgent;
   }
   return client;
+}
+
+bool _mapEquals(Map<String, String>? a, Map<String, String>? b) {
+  if (identical(a, b)) return true;
+  if (a == null || b == null || a.length != b.length) return false;
+  for (final entry in a.entries) {
+    if (b[entry.key] != entry.value) return false;
+  }
+  return true;
 }

@@ -1770,6 +1770,8 @@ final icyMetadata = IcyMetadata(
   info: IcyInfo(
     title: 'title',
     url: 'url',
+    artist: 'artist',
+    extras: const {'TIT2': 'title', 'TPE1': 'artist'},
   ),
 );
 
@@ -1785,6 +1787,8 @@ final icyMetadataMessage = IcyMetadataMessage(
   info: IcyInfoMessage(
     title: 'title',
     url: 'url',
+    artist: 'artist',
+    extras: const {'TIT2': 'title', 'TPE1': 'artist'},
   ),
 );
 
@@ -2061,6 +2065,8 @@ class MockAudioPlayer extends AudioPlayerPlatform {
         info: IcyInfoMessage(
           title: 'title',
           url: url,
+          extras: {},
+          artist: 'artist',
         ),
       ),
       duration: _duration,
