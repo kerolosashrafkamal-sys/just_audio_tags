@@ -449,29 +449,28 @@
                 hasIcyData = YES;
                 url = (NSString *)item.value;
             } else if ([item.keySpace isEqualToString:AVMetadataKeySpaceID3]) {
-                if (item.commonKey == AVMetadataCommonKeyTitle || [item.identifier containsString:@"TIT2"]) {
+                NSString *friendlyKey = [self mapId3Key:item];
+                if ((item.commonKey == AVMetadataCommonKeyTitle || [friendlyKey isEqualToString:@"title"]) && item.stringValue != nil) {
                     id3Title = (NSString *)item.stringValue;
-                } else if (item.commonKey == AVMetadataCommonKeyArtist || [item.identifier containsString:@"TPE1"]) {
+                } else if ((item.commonKey == AVMetadataCommonKeyArtist || [friendlyKey isEqualToString:@"artist"]) && item.stringValue != nil) {
                     id3Artist = (NSString *)item.stringValue;
                 }
-                if (item.identifier != nil && item.stringValue != nil) {
-                    [id3All setObject:item.stringValue forKey:item.identifier];
+                if (friendlyKey != nil && item.stringValue != nil) {
+                    [id3All setObject:item.stringValue forKey:friendlyKey];
                 }
             }
         }
     }
     if (hasIcyData || id3Title != (id)[NSNull null] || id3Artist != (id)[NSNull null]) {
         NSMutableDictionary *info = [[NSMutableDictionary alloc] init];
-        if (title != (id)[NSNull null]) [info setObject:title forKey:@"title"];
-        if (url != (id)[NSNull null]) [info setObject:url forKey:@"url"];
-        if (id3Artist != (id)[NSNull null] && id3Title != (id)[NSNull null]) {
-            NSString *combined = [NSString stringWithFormat:@"%@ - %@", id3Artist, id3Title];
-            [info setObject:combined forKey:@"title"];
-            [info setObject:id3Artist forKey:@"artist"];
-        } else if (id3Title != (id)[NSNull null]) {
+        // Prefer ID3 title when available, otherwise ICY StreamTitle.
+        if (id3Title != (id)[NSNull null]) {
             [info setObject:id3Title forKey:@"title"];
-        } else if (id3Artist != (id)[NSNull null]) {
-            [info setObject:id3Artist forKey:@"title"];
+        } else if (title != (id)[NSNull null]) {
+            [info setObject:title forKey:@"title"];
+        }
+        if (url != (id)[NSNull null]) [info setObject:url forKey:@"url"];
+        if (id3Artist != (id)[NSNull null]) {
             [info setObject:id3Artist forKey:@"artist"];
         }
         if (id3All.count > 0) {
@@ -480,6 +479,36 @@
         _icyMetadata = @{ @"info": info };
         [self broadcastPlaybackEvent];
     }
+}
+
+- (NSString *)mapId3Key:(AVMetadataItem *)item {
+    if (item == nil) return nil;
+    // Prefer commonKey when available.
+    if (item.commonKey == AVMetadataCommonKeyTitle) return @"title";
+    if (item.commonKey == AVMetadataCommonKeyArtist) return @"artist";
+    if (item.commonKey == AVMetadataCommonKeyAlbumName) return @"album";
+    if (item.commonKey == AVMetadataCommonKeyCreationDate) return @"year";
+    if (item.commonKey == AVMetadataCommonKeyType) return @"genre";
+
+    // Fallback to identifier suffix (e.g., id3/TIT2).
+    NSString *identifier = item.identifier;
+    if (identifier == nil) return nil;
+    NSArray<NSString *> *parts = [identifier componentsSeparatedByString:@"/"];
+    NSString *frameId = [parts lastObject];
+    if ([frameId isEqualToString:@"TIT2"]) return @"title";
+    if ([frameId isEqualToString:@"TPE1"]) return @"artist";
+    if ([frameId isEqualToString:@"TALB"]) return @"album";
+    if ([frameId isEqualToString:@"TPE2"]) return @"albumArtist";
+    if ([frameId isEqualToString:@"TCON"]) return @"genre";
+    if ([frameId isEqualToString:@"TRCK"]) return @"track";
+    if ([frameId isEqualToString:@"TPOS"]) return @"disc";
+    if ([frameId isEqualToString:@"TDRC"] || [frameId isEqualToString:@"TDAT"] || [frameId isEqualToString:@"TYER"]) return @"year";
+    if ([frameId isEqualToString:@"TCOM"]) return @"composer";
+    if ([frameId isEqualToString:@"TPUB"]) return @"publisher";
+    if ([frameId isEqualToString:@"TCOP"]) return @"copyright";
+    if ([frameId isEqualToString:@"TSSE"]) return @"encoder";
+    if ([frameId isEqualToString:@"COMM"]) return @"comment";
+    return frameId; // default to raw frame id
 }
 
 - (NSMutableArray<AudioSource *> *)decodeAudioSources:(NSArray *)data {

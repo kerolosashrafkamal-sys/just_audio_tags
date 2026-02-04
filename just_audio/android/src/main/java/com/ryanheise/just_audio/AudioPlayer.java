@@ -256,16 +256,14 @@ public class AudioPlayer implements MethodCallHandler, Player.Listener, Metadata
             } else if (entry instanceof Id3Frame) {
                 if (entry instanceof TextInformationFrame) {
                     TextInformationFrame textFrame = (TextInformationFrame) entry;
-                    if ("TIT2".equals(textFrame.id)) {
+                    final String friendlyKey = mapId3Key(textFrame);
+                    if ("title".equals(friendlyKey)) {
                         id3Title = textFrame.value;
-                        id3All.put(textFrame.id, textFrame.value);
-                        broadcastImmediatePlaybackEvent();
-                    } else if ("TPE1".equals(textFrame.id)) {
+                    } else if ("artist".equals(friendlyKey)) {
                         id3Artist = textFrame.value;
-                        id3All.put(textFrame.id, textFrame.value);
-                        broadcastImmediatePlaybackEvent();
-                    } else if (textFrame.value != null) {
-                        id3All.put(textFrame.id, textFrame.value);
+                    }
+                    if (textFrame.value != null && friendlyKey != null) {
+                        id3All.put(friendlyKey, textFrame.value);
                         broadcastImmediatePlaybackEvent();
                     }
                 }
@@ -929,24 +927,15 @@ public class AudioPlayer implements MethodCallHandler, Player.Listener, Metadata
         final Map<String, Object> icyData = new HashMap<>();
         if (icyInfo != null) {
             final Map<String, Object> info = new HashMap<>();
-            info.put("title", icyInfo.title);
+            // Prefer ID3 title if present, otherwise ICY title.
+            info.put("title", id3Title != null ? id3Title : icyInfo.title);
             info.put("url", icyInfo.url);
             if (id3Artist != null) info.put("artist", id3Artist);
             if (!id3All.isEmpty()) info.put("extras", new HashMap<>(id3All));
             icyData.put("info", info);
         } else if (id3Title != null || id3Artist != null || !id3All.isEmpty()) {
             final Map<String, Object> info = new HashMap<>();
-            String combinedTitle;
-            if (id3Artist != null && id3Title != null) {
-                combinedTitle = id3Artist + " - " + id3Title;
-            } else if (id3Title != null) {
-                combinedTitle = id3Title;
-            } else {
-                combinedTitle = id3Artist;
-            }
-            if (combinedTitle != null) {
-                info.put("title", combinedTitle);
-            }
+            if (id3Title != null) info.put("title", id3Title);
             if (id3Artist != null) {
                 info.put("artist", id3Artist);
             }
@@ -964,6 +953,52 @@ public class AudioPlayer implements MethodCallHandler, Player.Listener, Metadata
             icyData.put("headers", headers);
         }
         return icyData;
+    }
+
+    private String mapId3Key(TextInformationFrame frame) {
+        if (frame == null || frame.id == null) return null;
+        final String id = frame.id;
+        switch (id) {
+            case "TIT2":
+                return "title";
+            case "TPE1":
+                return "artist";
+            case "TALB":
+                return "album";
+            case "TPE2":
+                return "albumArtist";
+            case "TCON":
+                return "genre";
+            case "TRCK":
+                return "track";
+            case "TPOS":
+                return "disc";
+            case "TDRC":
+            case "TDAT":
+            case "TYER":
+                return "year";
+            case "TCOM":
+                return "composer";
+            case "TCOP":
+                return "copyright";
+            case "TPUB":
+                return "publisher";
+            case "COMM":
+                return "comment";
+            case "TLEN":
+                return "length";
+            case "TSSE":
+                return "encoder";
+            case "TXXX":
+                // Custom text frame: use description if available, fall back to id.
+                if (frame.description != null && !frame.description.isEmpty()) {
+                    return frame.description;
+                } else {
+                    return "custom";
+                }
+            default:
+                return id; // keep original if unknown
+        }
     }
 
     private long getCurrentPosition() {
